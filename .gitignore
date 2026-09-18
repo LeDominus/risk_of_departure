@@ -1,0 +1,11 @@
+*.csv
+*.parquet
+venv/
+__pycache__/
+*.png
+.env
+*.db
+*mlflow_
+tmp/
+*.onnx
+*.xls

@@ -1,0 +1,17 @@
+pandas
+numpy
+scikit-learn
+matplotlib
+seaborn
+lightgbm
+fastapi
+uvicorn
+imblearn
+boto3
+botocore
+skl2onnx
+onnx
+onnxruntime
+python-dotenv
+mlflow
+prometheus-fastapi-instrumentator
