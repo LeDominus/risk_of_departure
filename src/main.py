@@ -4,7 +4,9 @@ from fastapi import FastAPI, HTTPException, Query
 from contextlib import asynccontextmanager
 from src.storage.data_manager import DataManager
 from src.core.pipeline import forecast_pipeline
-from src.core.loading_data import load_data
+from src.schemas.result_schema import PredictResult
+from src.core.loading_data import load_data, write_data_to_s3
+from src.config.config import RESULT_KEY
 from prometheus_fastapi_instrumentator import Instrumentator
 
 @asynccontextmanager
@@ -37,7 +39,7 @@ def main():
     return "ok"
     
 
-@app.get("/predict")
+@app.get("/predict", response_model=PredictResult)
 def predict_from_s3(
     file_key: str = Query(..., description="Ключ (путь) к файлу CSV в бакете S3, например: churn_data.csv")
 ):
@@ -50,7 +52,7 @@ def predict_from_s3(
         return {
             "status": "success",
             "file_processed": file_key,
-            "data": result_df.to_dict(orient="records")
+            "result_filename": RESULT_KEY
         }
         
     except Exception as e:
@@ -58,7 +60,8 @@ def predict_from_s3(
             status_code=400, 
             detail=f"Ошибка в процессе обработки: {str(e)}"
         )
-
+    finally:
+        write_data_to_s3(dm = dm, key = RESULT_KEY, data = result_df)
 
 if __name__ == "__main__":
-    uvicorn.run(app, port=1111)
+    uvicorn.run(app, host =  "0.0.0.0", port=1111)

@@ -9,3 +9,5 @@ __pycache__/
 tmp/
 *.onnx
 *.xls
+grafana/
+logs/

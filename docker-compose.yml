@@ -1,11 +1,11 @@
 services:
   mlflow:
     image: ghcr.io/mlflow/mlflow:v3.11.1
-    container_name: mlflow-server
+    container_name: mlflow_risk_of_departure
     ports:
       - "5000:5000"
     volumes:
-      - ./mlflow_artifacts:/mlflow/artifacts
+      - ./mlflow_artifacts:/mlflow/artifacts/
       - ./mlflow_data:/mlflow/data
     command:
       - mlflow
@@ -21,3 +21,52 @@ services:
       - "5000"
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus_risk_of_departure
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana_risk_of_departure
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  evidently-monitor:
+    build: ./src/monitoring
+    container_name: evidently_risk_of_departure
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONBUFFERED=1
+      - REFERENCE_DATA_PATH=/app/data/raw/churn_data.csv
+      - PREDICTION_LOG_PATH=/app/data/logs/prediction_logs.jsonl
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+    name: risk_of_departure_prometheus_data
+  grafana_data:
+    name: risk_of_departure_grafana_data

@@ -22,31 +22,12 @@ TARGET_COLS = [
     'TotalCharges',
 ]
 
-ORIGIN_COLS = [
-    'customerID',
-    'gender',
-    'SeniorCitizen',
-    'Partner',
-    'Dependents',
-    'tenure',
-    'PhoneService',
-    'MultipleLines',
-    'InternetService',
-    'OnlineSecurity',
-    'OnlineBackup',
-    'DeviceProtection',
-    'TechSupport',
-    'StreamingTV',
-    'StreamingMovies',
-    'Contract',
-    'PaperlessBilling',
-    'PaymentMethod',
-    'MonthlyCharges',
-    'TotalCharges',
-]
-
+ORIGIN_COLS = TARGET_COLS.copy().append("customerID")
 
 RUN_ID = "0e1218bb2329462fb7740069e5a4a161"
+MLFLOW_TRACKING_URI = "http://localhost:5000"
+MLFLOW_MODEL_NAME = "logistic_regression.onnx"
+MLFLOW_CACHE_DIR = "tmp/mlflow_cache/"
 
 COLS_TO_CONV = ["MonthlyCharges", "TotalCharges"]
 NUM_FEATURES = ["tenure", "MonthlyCharges", "SeniorCitizen", "TotalCharges"]
@@ -59,6 +40,7 @@ MODEL_PARAMS = {
     "random_state": 42
 }
 MODEL_PATH = "/data/result/logistic_regression.onnx"
+RESULT_KEY = "forecast_result.csv"
 
 from dotenv import load_dotenv
 load_dotenv()

@@ -21,10 +21,7 @@ class DataManager:
         """Инициализация клиента"""
         try:
             session = Session()
-            
-            s3_config = Config(
-                s3={'addressing_style': 'path'}
-            )
+            s3_config = Config(s3={'addressing_style': 'path'})
             
             client = session.client(
                 service_name = "s3",
@@ -42,7 +39,7 @@ class DataManager:
         """Проверка жизнеспособности бакета"""
         try:
             self.client.head_bucket(Bucket=self.bucket)
-            print(f"Бакет '{self.bucket}' доступен и работает корректно")
+            print(f"Бакет доступен и работает корректно")
             
         except ClientError as e:
             error_code = e.response['Error']['Code']
