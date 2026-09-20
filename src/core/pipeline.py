@@ -34,7 +34,7 @@ def forecast_pipeline(data: pd.DataFrame) -> pd.DataFrame:
     
     finally:
         emit_batch_metrics(probs=predictions_proba)
-        append_prediction_log(prepared_df=prepared_df)
+        append_prediction_log(prepared_df=prepared_df, result=result)
     
     return result
 
