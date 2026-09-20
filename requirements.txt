@@ -16,3 +16,4 @@ python-dotenv
 mlflow
 prometheus-fastapi-instrumentator
 evidently
+duckdb

@@ -1,11 +1,12 @@
 import pandas as pd
 from src.core.model import PredictModel
+from src.storage.data_manager import DataManager
 from src.core.data_preparation import DataPreparation
 from src.monitoring.metrics import STAGE_LATENCY, PIPELINE_ERRORS
 from src.monitoring.metrics_registry import emit_batch_metrics
-from src.monitoring.evidently_monitoring import append_prediction_log
+from src.storage.prediction_writer import append_pred_log_to_s3
 
-def forecast_pipeline(data: pd.DataFrame) -> pd.DataFrame:
+def forecast_pipeline(dm: DataManager, data: pd.DataFrame) -> pd.DataFrame:
     """Pipeline для подготовки данных, инференса ONNX-модели и постпроцессинга"""
     if data.empty:
         raise ValueError("[forecast_pipeline] Входной DataFrame пуст")
@@ -34,7 +35,7 @@ def forecast_pipeline(data: pd.DataFrame) -> pd.DataFrame:
     
     finally:
         emit_batch_metrics(probs=predictions_proba)
-        append_prediction_log(prepared_df=prepared_df, result=result)
+        append_pred_log_to_s3(dm = dm, prepared_df=prepared_df, result_df=result)
     
     return result
 

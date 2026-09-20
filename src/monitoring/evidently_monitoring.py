@@ -1,17 +1,12 @@
 import json
 import time
 import pandas as pd
-from pathlib import Path
-from datetime import datetime, timezone
-from prometheus_client import start_http_server, Gauge
+from prometheus_client import start_http_server, Gauge, Histogram
 from evidently import Report
 from evidently.presets import DataDriftPreset
-
-LOG_PATH = Path("data/logs/prediction_logs.jsonl")
-REFERENCE_PATH = Path("data/raw/churn_data_new.csv")
-INTERVAL_SECONDS = 30
-WINDOW_ROWS = 1000
-PREDICTION_LOG_PATH = Path("data/logs/prediction_logs.jsonl")
+from src.config.monitoring_config import LOG_PATH, REFERENCE_PATH, WINDOW_ROWS, INTERVAL_SECONDS, MIN_SAMPLE_SIZE
+from src.storage.duckdb_manager import DuckDBManager
+from src.schemas.feature_schema import FEATURE_COLS
 
 DRIFT_SHARE = Gauge(
     "evidently_drift_share",
@@ -22,49 +17,19 @@ PSI_SCORE = Gauge(
     "Drift score for a feature",
     ["feature"],
 )
-
-def append_prediction_log(prepared_df: pd.DataFrame, result: dict | None = None) -> None:
-    try:
-        if prepared_df is None or prepared_df.empty:
-            return
-
-        path = PREDICTION_LOG_PATH
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-        timestamp = datetime.now(timezone.utc).isoformat()
-
-        predictions_by_id = {}
-        if isinstance(result, dict):
-            for item in result.get("data", []):
-                cid = item.get("customerID")
-                if cid is not None:
-                    predictions_by_id[cid] = {
-                        "Churn": item.get("Churn"),
-                        "Probability_of_churn": item.get("Probability_of_churn"),
-                    }
-
-        with path.open("a", encoding="utf-8") as f:
-            for record in prepared_df.to_dict(orient="records"):
-                entry = {
-                    "timestamp": timestamp,
-                    "features": record,
-                }
-
-                # Если есть customerID и для него есть предсказание — добавим
-                cid = record.get("customerID")
-                if cid is not None and cid in predictions_by_id:
-                    entry["prediction"] = predictions_by_id[cid]
-
-                f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
-
-    except Exception as e:
-        # Логирование не должно ломать основной пайплайн
-        print(f"[append_prediction_log] Ошибка логирования: {e}", flush=True)
+CURRENT_ROWS = Gauge(
+    "evidently_current_rows",
+    "Rows in current window"
+)
+S3_QUERY_LATENCY = Histogram(
+    "evidently_s3_query_seconds",
+    "DuckDB S3 query latency",
+    buckets=[0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+)
 
 def load_reference() -> pd.DataFrame:
-    if not REFERENCE_PATH.exists():
-        raise FileNotFoundError(f"Reference не найден: {REFERENCE_PATH}")
     df = pd.read_csv(REFERENCE_PATH)
+    df = df[[c for c in FEATURE_COLS if c in df.columns]]
     print(f"[evidently] reference loaded: {df.shape}", flush=True)
     return df
 
@@ -122,44 +87,48 @@ def extract_psi_scores(result: dict):
                 continue
     return scores
 
-def run_monitoring(reference_data: pd.DataFrame) -> None:
-    current_data = load_current()
-    if current_data.empty:
+def run_monitoring(reference_data: pd.DataFrame, db: DuckDBManager) -> None:
+    with S3_QUERY_LATENCY.time():
+        df = db.parse_logs(limit=WINDOW_ROWS)
+    
+    if df is None or df.empty:
+        print("[evidently] нет предсказаний в S3", flush=True)
+        CURRENT_ROWS.set(0)
         return
-
-    common_cols = [c for c in reference_data.columns if c in current_data.columns]
-    if not common_cols:
-        print("[evidently] Нет общих колонок между reference и current", flush=True)
+    CURRENT_ROWS.set(len(df))
+    
+    if len(df) < MIN_SAMPLE_SIZE:
+        print(
+            f"[evidently] пропускаем: строк {len(df)} < {MIN_SAMPLE_SIZE}",
+            flush=True,
+        )
         return
+    
+    common = [c for c in FEATURE_COLS if c in df.columns and c in reference_data.columns]
+    if not common:
+        print("[evidently] нет общих колонок между current и reference", flush=True)
+        return
+    
+    current = df[common]
+    ref = reference_data[common]
 
-    ref = reference_data[common_cols]
-    cur = current_data[common_cols]
-
-    # --- Новый API: Report([preset]), run() возвращает my_eval ---
+    print(f"[evidently] current rows: {len(current)}, features: {len(common)}", flush=True)
+    
     report = Report([DataDriftPreset()])
-    my_eval = report.run(current_data=cur, reference_data=ref)
-
+    my_eval = report.run(current_data=current, reference_data=ref)
     result = my_eval.dict()
 
-    # Диагностика (можно закомментировать после отладки)
-    print(f"[evidently] result keys: {list(result.keys())}", flush=True)
-
-    # --- drift_share ---
     drift_share = extract_drift_share(result)
     if drift_share is not None:
         DRIFT_SHARE.set(float(drift_share))
         print(f"[evidently] drift_share = {drift_share:.4f}", flush=True)
     else:
-        print("[evidently] Не удалось извлечь drift_share", flush=True)
+        print("[evidently] drift_share не найден", flush=True)
 
-    # --- PSI по колонкам ---
     psi_scores = extract_psi_scores(result)
-    if psi_scores:
-        for feature, score in psi_scores.items():
-            PSI_SCORE.labels(feature=feature).set(score)
-            print(f"[evidently] psi {feature} = {score:.4f}", flush=True)
-    else:
-        print("[evidently] Не удалось извлечь PSI-скоры", flush=True)
+    for feature, score in psi_scores.items():
+        PSI_SCORE.labels(feature=feature).set(score)
+    print(f"[evidently] psi computed for {len(psi_scores)} features", flush=True)
 
 #TODO: потом в отдельный микросервис
 if __name__ == "__main__":
@@ -168,11 +137,12 @@ if __name__ == "__main__":
 
     reference_data = load_reference()
 
-    while True:
-        try:
-            run_monitoring(reference_data)
-        except Exception as e:
-            import traceback
-            print(f"[evidently] Ошибка: {e}", flush=True)
-            traceback.print_exc()
-        time.sleep(INTERVAL_SECONDS)
+    with DuckDBManager() as db:
+        while True:
+            try:
+                run_monitoring(reference_data, db)
+            except Exception as e:
+                import traceback
+                print(f"[evidently] Ошибка: {e}", flush=True)
+                traceback.print_exc()
+            time.sleep(INTERVAL_SECONDS)

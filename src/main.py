@@ -25,6 +25,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         raise RuntimeError(f"Ошибка при инициализации mlflow: {e}") from e
     
+    
     print("Startup: application is ready")
     
     yield
@@ -47,7 +48,7 @@ def predict_from_s3(
         dm: DataManager = app.state.data_manager
         
         raw_data = load_data(dm = dm, key = file_key)
-        result_df = forecast_pipeline(raw_data)
+        result_df = forecast_pipeline(dm = dm, data = raw_data)
         
         return {
             "status": "success",

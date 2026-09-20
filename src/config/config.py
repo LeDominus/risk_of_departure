@@ -23,6 +23,13 @@ TARGET_COLS = [
 ]
 
 ORIGIN_COLS = TARGET_COLS.copy().append("customerID")
+FEATURE_COLS = [
+    "gender", "SeniorCitizen", "Partner", "Dependents",
+    "tenure", "PhoneService", "MultipleLines", "InternetService",
+    "OnlineSecurity", "OnlineBackup", "DeviceProtection", "TechSupport",
+    "StreamingTV", "StreamingMovies", "Contract", "PaperlessBilling",
+    "PaymentMethod", "MonthlyCharges", "TotalCharges",
+]
 
 RUN_ID = "0e1218bb2329462fb7740069e5a4a161"
 MLFLOW_TRACKING_URI = "http://localhost:5000"
@@ -49,3 +56,5 @@ AWS_SECRET_KEY_ID = os.getenv("AWS_SECRET_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 BUCKET = os.getenv("BUCKET")
 S3_ENDPOINT = os.getenv("S3_ENDPOINT")
+PREDICTIONS_PREFIX = os.getenv("S3_PREDICTIONS_PREFIX", "risk-of-departure/predictions")
+S3_REGION = os.getenv("S3_REGION", "ru-central1")
