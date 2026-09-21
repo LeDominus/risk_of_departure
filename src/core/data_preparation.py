@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
-from src.config.config import TARGET_COLS, COLS_TO_CONV
+from src.config.data_config import TARGET_COLS, COLS_TO_CONV
 
 class DataPreparation:
     def __init__(self, df: pd.DataFrame):

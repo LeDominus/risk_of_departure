@@ -2,13 +2,13 @@ from pathlib import Path
 
 import mlflow
 
-from src.config.config import (
+from src.config.mlflow_config import (
     MLFLOW_CACHE_DIR,
-    MLFLOW_MODEL_NAME,
     MLFLOW_TRACKING_URI,
-    RUN_ID,
 )
 
+RUN_ID = ""
+MLFLOW_MODEL_NAME = "logreg_regression"
 
 def download_model() -> Path:
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)

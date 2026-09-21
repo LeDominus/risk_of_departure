@@ -1,42 +1,54 @@
 import pandas as pd
-from pathlib import Path
 import onnxruntime as ort
 import mlflow
 import numpy as np
-from src.config.config import (
+from pathlib import Path
+from mlflow.tracking import MlflowClient
+from src.config.mlflow_config import (
     MLFLOW_CACHE_DIR,
-    MLFLOW_MODEL_NAME,
+    MODEL_ALIAS,
+    MODEL_ARTIFACT_PATH,
+    MODEL_NAME,
     MLFLOW_TRACKING_URI,
-    MODEL_PARAMS,
-    RUN_ID,
 )
 from typing import Tuple
 
-MODEL_NAME = MLFLOW_MODEL_NAME
-CACHE_DIR = MLFLOW_CACHE_DIR
-
 class PredictModel:
     def __init__(self):     
-        self.model_name = MODEL_NAME
-        self._model_params = MODEL_PARAMS
-        self.run_id = RUN_ID
+        self._model_name = MODEL_NAME
+        self._model_alias = MODEL_ALIAS
+        self._model_version = None
+        self._tracking_uri = MLFLOW_TRACKING_URI
         
-        self.cache_dir = Path(CACHE_DIR)
+        mlflow.set_tracking_uri(self._tracking_uri)
+        self._client = MlflowClient()
+        
+        self.cache_dir = Path(MLFLOW_CACHE_DIR)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
         self.model = self._load_model()
     
     def _load_model(self) -> ort.InferenceSession:
+        """Загрузка модели из Mlflow"""
         try:
-            artifact_path = f"model/{self.model_name}"
+            model_version_info = self._client.get_model_version_by_alias(
+                name=self._model_name,
+                alias=self._model_alias,
+            )
+            self._model_version = model_version_info.version
 
             local_path = mlflow.artifacts.download_artifacts(
-                run_id=self.run_id,
-                artifact_path=artifact_path,
+                run_id=model_version_info.run_id,
+                artifact_path=MODEL_ARTIFACT_PATH,
                 dst_path=str(self.cache_dir),
             )
-            return ort.InferenceSession(local_path)
+
+            local_dir = Path(local_path)
+            onnx_files = list(local_dir.rglob("*.onnx"))
+            if not onnx_files:
+                raise FileNotFoundError(f"[PredictModel] .onnx не найден в {local_dir}")
+
+            return ort.InferenceSession(str(onnx_files[0]))
         except Exception as e:
             raise RuntimeError(f"[PredictModel] Ошибка загрузки ONNX модели: {e}") from e
         

@@ -6,7 +6,8 @@ from src.storage.data_manager import DataManager
 from src.core.pipeline import forecast_pipeline
 from src.schemas.result_schema import PredictResult
 from src.core.loading_data import load_data, write_data_to_s3
-from src.config.config import RESULT_KEY
+from src.config.data_config import RESULT_KEY
+from src.monitoring.metrics import PIPELINE_ERRORS
 from prometheus_fastapi_instrumentator import Instrumentator
 
 @asynccontextmanager
@@ -57,6 +58,7 @@ def predict_from_s3(
         }
         
     except Exception as e:
+        PIPELINE_ERRORS.labels(stage="unknown", error_type=type(e).__name__).inc()
         raise HTTPException(
             status_code=400, 
             detail=f"Ошибка в процессе обработки: {str(e)}"
